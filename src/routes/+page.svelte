@@ -86,7 +86,7 @@
 
 		// Menu/UI settings
 		menu: {
-			position: 'top' as 'top' | 'bottom' // Can be 'top' or 'bottom'
+			position: 'bottom' as 'top' | 'bottom' // Can be 'top' or 'bottom'
 		},
 
 		// File paths
@@ -581,6 +581,10 @@
 
 <svelte:head>
 	<title>Cat Walkies - in Three.js by JoniBach</title>
+	<meta
+		name="viewport"
+		content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+	/>
 </svelte:head>
 
 <div class="viewer-container">
@@ -611,6 +615,7 @@
 		position: relative;
 		width: 100vw;
 		height: 100vh;
+		height: 100dvh; /* Dynamic viewport height for mobile - respects browser UI */
 		overflow: hidden;
 	}
 
@@ -625,7 +630,7 @@
 	}
 
 	.controls {
-		position: absolute;
+		position: fixed; /* Changed from absolute to fixed for better mobile behavior */
 		bottom: 10px;
 		left: 10px;
 		right: 10px;
@@ -643,16 +648,23 @@
 		justify-content: space-between;
 		align-items: center;
 		box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+
+		/* Critical mobile fixes */
+		padding-bottom: max(12px, env(safe-area-inset-bottom)); /* Respect notches/home indicators */
+		padding-left: max(10px, env(safe-area-inset-left));
+		padding-right: max(10px, env(safe-area-inset-right));
 	}
 
 	/* Menu position overrides */
 	.menu-top {
 		top: 10px;
 		bottom: auto;
+		padding-top: max(12px, env(safe-area-inset-top)); /* Top notch support */
+		padding-bottom: 12px; /* Reset bottom padding when at top */
 	}
 
 	.menu-bottom {
-		bottom: 10px;
+		bottom: max(10px, env(safe-area-inset-bottom)); /* Adjust for device bottom */
 		top: auto;
 	}
 
