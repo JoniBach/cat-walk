@@ -620,17 +620,20 @@
 		bottom: 10px;
 		left: 10px;
 		right: 10px;
-		background: rgba(0, 0, 0, 0.8);
+		background: rgba(0, 0, 0, 0.9);
 		color: white;
-		padding: 8px;
-		border-radius: 6px;
+		padding: 12px;
+		border-radius: 8px;
 		font-family: Arial, sans-serif;
 		backdrop-filter: blur(10px);
+		-webkit-backdrop-filter: blur(10px); /* Safari support */
+		z-index: 1000; /* Ensure it appears above other elements */
 
 		display: flex;
 		flex-wrap: wrap;
 		justify-content: space-between;
 		align-items: center;
+		box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
 	}
 
 	.button-group {
@@ -664,6 +667,40 @@
 
 	.gait-btn:active {
 		transform: translateY(0);
+	}
+
+	/* Mobile-specific improvements */
+	@media (max-width: 768px) {
+		.controls {
+			bottom: 20px;
+			left: 15px;
+			right: 15px;
+			padding: 16px;
+			background: rgba(0, 0, 0, 0.95);
+			backdrop-filter: blur(20px);
+			-webkit-backdrop-filter: blur(20px);
+			z-index: 10000; /* Extra high for mobile */
+			box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+		}
+
+		.button-group {
+			gap: 12px;
+			margin-bottom: 8px;
+		}
+
+		.gait-btn {
+			padding: 10px 12px;
+			font-size: 12px;
+			min-width: 60px;
+			border: 1px solid rgba(255, 255, 255, 0.2);
+		}
+
+		.controls-title {
+			font-size: 12px;
+			margin: 4px 0 0 0;
+			text-align: center;
+			width: 100%;
+		}
 	}
 
 	:global(body) {
