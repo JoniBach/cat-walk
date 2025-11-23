@@ -160,9 +160,7 @@
 		}
 
 		// BFS to find shortest path through intermediate states
-		const queue: Array<{ state: GaitState; path: string[] }> = [
-			{ state: from, path: [] }
-		];
+		const queue: Array<{ state: GaitState; path: string[] }> = [{ state: from, path: [] }];
 		const visited = new Set<GaitState>([from]);
 
 		while (queue.length > 0) {
@@ -177,7 +175,7 @@
 
 				// Build path by combining current path + this transition
 				const newPath = [...currentPath];
-				
+
 				// Add transition animations, but skip intermediate loops
 				for (let i = 0; i < transition.length; i++) {
 					const anim = transition[i];
@@ -435,10 +433,10 @@
 			isTransitioning = false;
 			currentAnimIndex = 0;
 			animationQueue = [];
-			
+
 			// Update current gait state
 			currentGaitState = getCurrentGait();
-			
+
 			// Process pending transition if any
 			if (pendingTargetGait) {
 				const nextTarget = pendingTargetGait;
@@ -452,7 +450,7 @@
 		// Play next animation in queue
 		const animName = animationQueue[currentAnimIndex];
 		const isLastInQueue = currentAnimIndex === animationQueue.length - 1;
-		
+
 		// Last animation should loop, others should not
 		playAnimation(animName, isLastInQueue, 0.3);
 		currentAnimIndex++;
@@ -507,7 +505,7 @@
 	function startTransitionToGait(targetGait: GaitState) {
 		const currentGait = getCurrentGait();
 		const transitionPath = findTransitionPath(currentGait, targetGait);
-		
+
 		if (transitionPath.length === 0) {
 			console.warn(`No transition path found from ${currentGait} to ${targetGait}`);
 			return;
@@ -517,11 +515,10 @@
 		animationQueue = transitionPath;
 		currentAnimIndex = 0;
 		isTransitioning = true;
-		
+
 		// Start playing the queue
 		playNextInQueue();
 	}
-
 
 	function updateModelScale() {
 		if (model) {
@@ -614,7 +611,7 @@
 
 	.controls {
 		position: absolute;
-		top: 10px;
+		bottom: 10px;
 		left: 10px;
 		right: 10px;
 		background: rgba(0, 0, 0, 0.8);
@@ -637,7 +634,8 @@
 	}
 
 	.controls-title {
-		margin: 0;
+		/* margin: 10px 0 0 0; */
+		margin: 8px 0;
 		font-size: 14px;
 	}
 
