@@ -672,14 +672,15 @@
 	/* Mobile-specific improvements */
 	@media (max-width: 768px) {
 		.controls {
-			bottom: 20px;
-			left: 15px;
-			right: 15px;
+			bottom: max(20px, env(safe-area-inset-bottom, 20px) + 10px);
+			left: max(10px, env(safe-area-inset-left, 10px));
+			right: max(10px, env(safe-area-inset-right, 10px));
 			padding: 16px;
+			padding-bottom: max(16px, env(safe-area-inset-bottom, 16px) + 6px);
 			background: rgba(0, 0, 0, 0.95);
 			backdrop-filter: blur(20px);
 			-webkit-backdrop-filter: blur(20px);
-			z-index: 10000; /* Extra high for mobile */
+			z-index: 10000;
 			box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
 		}
 
