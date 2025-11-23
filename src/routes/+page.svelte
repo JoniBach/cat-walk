@@ -90,6 +90,32 @@
 		}
 	} as const;
 
+	// Animation sequences for dynamic transitions
+	const animationSequences: Record<string, string[]> = {
+		stand: ['stand'],
+		stand_to_trot: ['stand_to_trot', 'trot'],
+		stand_to_walk: ['stand_to_walk', 'walk'],
+		trot: ['trot'],
+		trot_to_stand: ['trot_to_stand', 'stand'],
+		trot_to_walk: ['trot_to_walk', 'walk'],
+		walk: ['walk'],
+		walk_to_stand: ['walk_to_stand', 'stand'],
+		walk_to_trot: ['walk_to_trot', 'trot']
+	};
+
+	// Transition paths for smart chaining between states
+	const transitionPaths: Record<string, string[]> = {
+		'stand-stand': ['stand'],
+		'stand-trot': ['stand_to_trot'],
+		'stand-walk': ['stand_to_walk'],
+		'trot-trot': ['trot'],
+		'trot-stand': ['trot_to_stand'],
+		'trot-walk': ['trot_to_walk'],
+		'walk-walk': ['walk'],
+		'walk-stand': ['walk_to_stand'],
+		'walk-trot': ['walk_to_trot']
+	};
+
 	let canvas: HTMLCanvasElement;
 	let scene: THREE.Scene;
 	let camera: THREE.PerspectiveCamera;
@@ -105,33 +131,23 @@
 	let selectedAnimation = '';
 	let isPlaying = false;
 
-	// Walking state
-	let isWalking = false;
-
 	// Transition state
 	let isTransitioning = false;
-	let pendingTransition: string | null = null;
 
-	// Walk stop transition state
-	let shouldStopWalking = false;
+	// Sequence state
+	let currentSequence: string[] | null = null;
+	let sequenceIndex = 0;
+	let sequenceQueue: string[][] = [];
+	let pendingTransitions: string[] = [];
+	let waitForCycleEnd = false;
 
 	// Model scale control
 	let modelScale = CONFIG.model.scale;
-
-	function handleKeyDown(event: KeyboardEvent) {
-		if (event.code === 'Space' || event.code === 'Enter') {
-			event.preventDefault(); // Prevent default behavior (page scroll for space, form submit for enter)
-			toggleWalk();
-		}
-	}
 
 	onMount(() => {
 		initThreeJS();
 		loadGLTF();
 		animate();
-
-		// Add keyboard event listeners
-		window.addEventListener('keydown', handleKeyDown);
 
 		return () => {
 			if (controls) {
@@ -140,8 +156,6 @@
 			if (renderer) {
 				renderer.dispose();
 			}
-			// Remove keyboard event listeners
-			window.removeEventListener('keydown', handleKeyDown);
 		};
 	});
 
@@ -326,6 +340,27 @@
 		selectedAnimation = animationName;
 	}
 
+	function playSequence(sequenceId: string) {
+		const sequence = animationSequences[sequenceId];
+		if (!sequence || sequence.length === 0) return;
+
+		currentSequence = sequence;
+		sequenceIndex = 0;
+		isTransitioning = true;
+
+		// Play the first animation in the sequence (transition, no loop)
+		playAnimation(sequence[0], false, 0.3);
+	}
+
+	function playNextInQueue() {
+		if (sequenceQueue.length > 0) {
+			currentSequence = sequenceQueue.shift()!;
+			sequenceIndex = 0;
+			isTransitioning = true;
+			playAnimation(currentSequence[0], false, 0.3);
+		}
+	}
+
 	function stopAnimation() {
 		if (currentAction) {
 			currentAction.stop();
@@ -333,32 +368,61 @@
 		}
 	}
 
-	function toggleWalk() {
-		const wasWalking = isWalking;
-		isWalking = !isWalking;
-
-		if (isWalking) {
-			// Start walking: stand-to-walk → walk (seamless with crossfade)
-			playAnimation('stand-to-walk', false, 0.3); // Longer crossfade for smoother transition
-			isTransitioning = true;
-			pendingTransition = 'walk';
-		} else {
-			// Stop walking: set flag to transition at end of current walk cycle
-			if (wasWalking && selectedAnimation === 'walk') {
-				// Currently in walk loop, wait for cycle to finish
-				shouldStopWalking = true;
-			} else {
-				// Not in walk loop, directly transition
-				playAnimation('Walk to stand', false, 0.3); // Longer crossfade for smoother transition
-				isTransitioning = true;
-				pendingTransition = 'stand';
-			}
-		}
-	}
-
 	function getAnimationDuration(animationName: string): number {
 		const clip = animations.find((clip) => clip.name === animationName);
 		return clip ? clip.duration : 1.0;
+	}
+
+	function getCurrentGait(): string {
+		if (selectedAnimation.includes('trot')) return 'trot';
+		if (selectedAnimation.includes('walk')) return 'walk';
+		if (selectedAnimation.includes('stand')) return 'stand';
+		return 'stand'; // default
+	}
+
+	function playTransitionTo(targetGait: string) {
+		const currentGait = getCurrentGait();
+		if (currentGait === targetGait) return; // already in target gait
+
+		if (isTransitioning) {
+			// Queue the transition request
+			if (!pendingTransitions.includes(targetGait)) {
+				pendingTransitions.push(targetGait);
+			}
+			return;
+		}
+
+		// Check if we need to wait for current cycle to end
+		const currentClip = animations.find((clip) => clip.name === selectedAnimation);
+		if (currentClip && currentAction && currentAction.loop === THREE.LoopRepeat) {
+			// Currently in a looping animation, wait for cycle end
+			if (!pendingTransitions.includes(targetGait)) {
+				pendingTransitions.push(targetGait);
+			}
+			waitForCycleEnd = true;
+			return;
+		}
+
+		// Start transition immediately
+		startTransition(targetGait);
+		waitForCycleEnd = false; // Reset flag
+	}
+
+	function startTransition(targetGait: string) {
+		const currentGait = getCurrentGait();
+		const pathKey = `${currentGait}-${targetGait}`;
+		const path = transitionPaths[pathKey];
+		if (!path || path.length === 0) {
+			console.log(`No transition path defined for ${pathKey}`);
+			return;
+		}
+
+		// Queue all sequences in the path
+		sequenceQueue = path.map((seqId) => animationSequences[seqId]).filter((seq) => seq);
+
+		if (sequenceQueue.length > 0) {
+			playNextInQueue();
+		}
 	}
 
 	function updateModelScale() {
@@ -385,36 +449,45 @@
 		if (mixer) {
 			mixer.update(CONFIG.animation.deltaTime);
 
-			// Check for walk cycle end to stop walking
-			if (shouldStopWalking && selectedAnimation === 'walk' && currentAction) {
-				const walkClip = animations.find((clip) => clip.name === 'walk');
-				if (walkClip) {
-					const cycleProgress = currentAction.time % walkClip.duration;
-					const timeToEnd = walkClip.duration - cycleProgress;
+			// Check for cycle end to trigger queued transitions
+			if (waitForCycleEnd && currentAction && selectedAnimation) {
+				const currentClip = animations.find((clip) => clip.name === selectedAnimation);
+				if (currentClip && currentAction.loop === THREE.LoopRepeat) {
+					const cycleProgress = currentAction.time % currentClip.duration;
+					const timeToEnd = currentClip.duration - cycleProgress;
 
-					// Trigger transition when very close to end of cycle (within 0.1 seconds)
-					if (timeToEnd <= 0.1) {
-						playAnimation('Walk to stand', false, 0.4); // Even longer crossfade for walk-to-stand
-						isTransitioning = true;
-						pendingTransition = 'stand';
-						shouldStopWalking = false;
+					// Trigger transition when close to end of cycle (within crossfade duration)
+					if (timeToEnd <= 0.3 && pendingTransitions.length > 0) {
+						const nextTarget = pendingTransitions.shift()!;
+						waitForCycleEnd = false;
+						startTransition(nextTarget);
 					}
 				}
 			}
 
-			// Check for seamless transitions
-			if (isTransitioning && currentAction && selectedAnimation) {
+			// Check for sequence transitions
+			if (isTransitioning && currentAction && selectedAnimation && currentSequence) {
 				const currentClip = animations.find((clip) => clip.name === selectedAnimation);
 				if (currentClip && currentAction.time >= currentClip.duration - 0.05) {
-					// Near end of animation
-					if (pendingTransition) {
-						if (pendingTransition === 'walk') {
-							playAnimation('walk', true, 0.3); // Crossfade to walk loop
-						} else if (pendingTransition === 'stand') {
-							playAnimation('stand', true, 0.3); // Crossfade to stand loop
-						}
+					if (sequenceIndex < currentSequence.length - 1) {
+						sequenceIndex++;
+						const nextAnim = currentSequence[sequenceIndex];
+						const isLast = sequenceIndex === currentSequence.length - 1;
+						playAnimation(nextAnim, isLast, 0.3); // Last animation in sequence loops
+					} else {
+						// Sequence completed
+						currentSequence = null;
+						sequenceIndex = 0;
 						isTransitioning = false;
-						pendingTransition = null;
+
+						// Check if there are more sequences in queue
+						if (sequenceQueue.length > 0) {
+							playNextInQueue();
+						} else if (pendingTransitions.length > 0) {
+							// Process next pending transition
+							const nextTarget = pendingTransitions.shift()!;
+							startTransition(nextTarget);
+						}
 					}
 				}
 			}
@@ -432,11 +505,12 @@
 	<canvas bind:this={canvas}></canvas>
 
 	<div class="controls">
-		<h1>Cat Walk</h1>
-		<button on:click={toggleWalk} class="walk-btn">
-			{isWalking ? 'Stop Walking' : 'Start Walking'}
-		</button>
-		<p class="keyboard-hint">Press <kbd>Space</kbd> or <kbd>Enter</kbd></p>
+		<div class="button-group">
+			<button on:click={() => playTransitionTo('stand')} class="gait-btn"> Stand </button>
+			<button on:click={() => playTransitionTo('walk')} class="gait-btn"> Walk </button>
+			<button on:click={() => playTransitionTo('trot')} class="gait-btn"> Trot </button>
+		</div>
+		<h1 class="controls-title">GLTF Cat Viewer</h1>
 	</div>
 </div>
 
@@ -456,110 +530,52 @@
 
 	.controls {
 		position: absolute;
-		top: 20px;
-		left: 20px;
+		top: 10px;
+		left: 10px;
+		right: 10px;
 		background: rgba(0, 0, 0, 0.8);
 		color: white;
-		padding: 12px;
-		border-radius: 8px;
-		min-width: 180px;
+		padding: 8px;
+		border-radius: 6px;
 		font-family: Arial, sans-serif;
 		backdrop-filter: blur(10px);
+
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: space-between;
+		align-items: center;
 	}
 
-	.controls h1 {
-		margin: 0 0 10px 0;
-		font-size: 18px;
-		color: #fff;
-		text-align: center;
+	.button-group {
+		display: flex;
+		gap: 8px;
+		flex-wrap: wrap;
 	}
 
-	.walk-btn {
-		width: 100%;
-		padding: 8px 16px;
-		background: #2196f3;
+	.controls-title {
+		margin: 0;
+		font-size: 14px;
+	}
+
+	.gait-btn {
+		padding: 6px 8px;
+		background: #555;
 		color: white;
 		border: none;
-		border-radius: 6px;
+		border-radius: 4px;
 		cursor: pointer;
-		font-size: 14px;
+		font-size: 10px;
 		font-weight: bold;
 		transition: all 0.2s ease;
 	}
 
-	.walk-btn:hover {
-		background: #1976d2;
+	.gait-btn:hover {
+		background: #777;
 		transform: translateY(-1px);
 	}
 
-	.walk-btn:active {
+	.gait-btn:active {
 		transform: translateY(0);
-	}
-
-	.keyboard-hint {
-		margin: 8px 0 0 0;
-		font-size: 10px;
-		color: #ccc;
-		text-align: center;
-		opacity: 0.8;
-	}
-
-	.keyboard-hint kbd {
-		background: rgba(255, 255, 255, 0.1);
-		border: 1px solid rgba(255, 255, 255, 0.2);
-		border-radius: 3px;
-		padding: 1px 3px;
-		font-size: 9px;
-		font-family: monospace;
-		color: #fff;
-	}
-
-	/* Mobile responsiveness */
-	@media (max-width: 768px) {
-		.controls {
-			top: 10px;
-			left: 10px;
-			right: 10px;
-			min-width: auto;
-			padding: 10px;
-			border-radius: 6px;
-		}
-
-		.controls h1 {
-			font-size: 16px;
-			margin-bottom: 8px;
-		}
-
-		.walk-btn {
-			padding: 10px 12px;
-			font-size: 14px;
-		}
-
-		.keyboard-hint {
-			font-size: 9px;
-			margin-top: 6px;
-		}
-	}
-
-	@media (max-width: 480px) {
-		.controls {
-			padding: 8px;
-		}
-
-		.controls h1 {
-			font-size: 14px;
-			margin-bottom: 6px;
-		}
-
-		.walk-btn {
-			padding: 12px 10px;
-			font-size: 13px;
-		}
-
-		.keyboard-hint {
-			font-size: 8px;
-			margin-top: 4px;
-		}
 	}
 
 	:global(body) {
