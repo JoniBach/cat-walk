@@ -90,78 +90,120 @@
 		}
 	} as const;
 
-	// Animation sequences for dynamic transitions
-	const animationSequences: Record<string, string[]> = {
-		stand: ['stand'],
-		stand_to_trot: ['stand_to_trot', 'trot'],
-		stand_to_walk: ['stand_to_walk', 'walk'],
-		stand_to_gallop_direct: ['stand_to_trot', 'trot_to_gallop', 'gallop'],
-		stand_to_sit: ['stand_to_sit', 'sit'],
-		trot: ['trot'],
-		trot_to_stand: ['trot_to_stand', 'stand'],
-		trot_to_walk: ['trot_to_walk', 'walk'],
-		trot_to_gallop: ['trot_to_gallop', 'gallop'],
-		gallop: ['gallop'],
-		gallop_to_stand_direct: ['gallop_to_trot', 'trot_to_stand', 'stand'],
-		gallop_to_walk_direct: ['gallop_to_trot', 'trot_to_walk', 'walk'],
-		gallop_to_trot: ['gallop_to_trot', 'trot'],
-		walk: ['walk'],
-		walk_to_stand: ['walk_to_stand', 'stand'],
-		walk_to_trot: ['walk_to_trot', 'trot'],
-		walk_to_gallop_direct: ['walk_to_trot', 'trot_to_gallop', 'gallop'],
-		sit: ['sit'],
-		sit_to_stand: ['sit_to_stand', 'stand'],
-		sit_to_walk_direct: ['sit_to_stand', 'stand_to_walk', 'walk'],
-		sit_to_trot_direct: ['sit_to_stand', 'stand_to_trot', 'trot'],
-		sit_to_gallop_direct: ['sit_to_stand', 'stand_to_gallop_direct'],
-		sit_to_reach: ['sit_to_reach', 'reach'],
-		reach: ['reach'],
-		reach_to_sit: ['reach_to_sit', 'sit'],
-		reach_to_stand_direct: ['reach_to_sit', 'sit_to_stand', 'stand'],
-		reach_to_walk_direct: ['reach_to_sit', 'sit_to_walk_direct'],
-		reach_to_trot_direct: ['reach_to_sit', 'sit_to_trot_direct'],
-		reach_to_gallop_direct: ['reach_to_sit', 'sit_to_gallop_direct'],
+	// Type-safe gait state system
+	type GaitState = 'stand' | 'walk' | 'trot' | 'gallop' | 'sit' | 'reach';
+
+	// Graph-based transition system - defines only direct transitions
+	const transitionGraph: Record<GaitState, Record<GaitState, string[]>> = {
+		stand: {
+			stand: ['stand'],
+			walk: ['stand_to_walk', 'walk'],
+			trot: ['stand_to_trot', 'trot'],
+			gallop: ['stand_to_trot', 'trot_to_gallop', 'gallop'],
+			sit: ['stand_to_sit', 'sit'],
+			reach: [] // Auto-calculated: stand→sit→reach
+		},
+		walk: {
+			stand: ['walk_to_stand', 'stand'],
+			walk: ['walk'],
+			trot: ['walk_to_trot', 'trot'],
+			gallop: ['walk_to_trot', 'trot_to_gallop', 'gallop'],
+			sit: [], // Auto-calculated: walk→stand→sit
+			reach: [] // Auto-calculated: walk→stand→sit→reach
+		},
+		trot: {
+			stand: ['trot_to_stand', 'stand'],
+			walk: ['trot_to_walk', 'walk'],
+			trot: ['trot'],
+			gallop: ['trot_to_gallop', 'gallop'],
+			sit: [], // Auto-calculated: trot→stand→sit
+			reach: [] // Auto-calculated: trot→stand→sit→reach
+		},
+		gallop: {
+			stand: ['gallop_to_trot', 'trot_to_stand', 'stand'],
+			walk: ['gallop_to_trot', 'trot_to_walk', 'walk'],
+			trot: ['gallop_to_trot', 'trot'],
+			gallop: ['gallop'],
+			sit: [], // Auto-calculated: gallop→stand→sit
+			reach: [] // Auto-calculated: gallop→stand→sit→reach
+		},
+		sit: {
+			stand: ['sit_to_stand', 'stand'],
+			walk: ['sit_to_stand', 'stand_to_walk', 'walk'],
+			trot: ['sit_to_stand', 'stand_to_trot', 'trot'],
+			gallop: ['sit_to_stand', 'stand_to_trot', 'trot_to_gallop', 'gallop'],
+			sit: ['sit'],
+			reach: ['sit_to_reach', 'reach']
+		},
+		reach: {
+			stand: ['reach_to_sit', 'sit_to_stand', 'stand'],
+			walk: ['reach_to_sit', 'sit_to_stand', 'stand_to_walk', 'walk'],
+			trot: ['reach_to_sit', 'sit_to_stand', 'stand_to_trot', 'trot'],
+			gallop: ['reach_to_sit', 'sit_to_stand', 'stand_to_trot', 'trot_to_gallop', 'gallop'],
+			sit: ['reach_to_sit', 'sit'],
+			reach: ['reach']
+		}
 	};
 
-	// Transition paths for smart chaining between states
-	const transitionPaths: Record<string, string[]> = {
-		'stand-stand': ['stand'],
-		'stand-trot': ['stand_to_trot'],
-		'stand-walk': ['stand_to_walk'],
-		'stand-gallop': ['stand_to_gallop_direct'],
-		'stand-sit': ['stand_to_sit'],
-		'stand-reach': ['stand_to_sit', 'sit_to_reach'],
-		'trot-trot': ['trot'],
-		'trot-stand': ['trot_to_stand'],
-		'trot-walk': ['trot_to_walk'],
-		'trot-gallop': ['trot_to_gallop'],
-		'trot-sit': ['trot_to_stand', 'stand_to_sit'],
-		'trot-reach': ['trot_to_stand', 'stand_to_sit', 'sit_to_reach'],
-		'gallop-gallop': ['gallop'],
-		'gallop-stand': ['gallop_to_stand_direct'],
-		'gallop-walk': ['gallop_to_walk_direct'],
-		'gallop-trot': ['gallop_to_trot'],
-		'gallop-sit': ['gallop_to_stand_direct', 'stand_to_sit'],
-		'gallop-reach': ['gallop_to_stand_direct', 'stand_to_sit', 'sit_to_reach'],
-		'walk-walk': ['walk'],
-		'walk-stand': ['walk_to_stand'],
-		'walk-trot': ['walk_to_trot'],
-		'walk-gallop': ['walk_to_gallop_direct'],
-		'walk-sit': ['walk_to_stand', 'stand_to_sit'],
-		'walk-reach': ['walk_to_stand', 'stand_to_sit', 'sit_to_reach'],
-		'sit-sit': ['sit'],
-		'sit-stand': ['sit_to_stand'],
-		'sit-walk': ['sit_to_walk_direct'],
-		'sit-trot': ['sit_to_trot_direct'],
-		'sit-gallop': ['sit_to_gallop_direct'],
-		'sit-reach': ['sit_to_reach'],
-		'reach-reach': ['reach'],
-		'reach-stand': ['reach_to_stand_direct'],
-		'reach-walk': ['reach_to_walk_direct'],
-		'reach-trot': ['reach_to_trot_direct'],
-		'reach-gallop': ['reach_to_gallop_direct'],
-		'reach-sit': ['reach_to_sit'],
-	};
+	// BFS pathfinding algorithm for automatic transition routing
+	function findTransitionPath(from: GaitState, to: GaitState): string[] {
+		// Same state - return looping animation
+		if (from === to) {
+			return transitionGraph[from][to];
+		}
+
+		// Check for direct path first
+		const directPath = transitionGraph[from][to];
+		if (directPath && directPath.length > 0) {
+			console.log(`Direct path ${from}→${to}:`, directPath);
+			return directPath;
+		}
+
+		// BFS to find shortest path through intermediate states
+		const queue: Array<{ state: GaitState; path: string[] }> = [
+			{ state: from, path: [] }
+		];
+		const visited = new Set<GaitState>([from]);
+
+		while (queue.length > 0) {
+			const { state: currentState, path: currentPath } = queue.shift()!;
+
+			// Check all possible next states from current state
+			for (const nextState of Object.keys(transitionGraph[currentState]) as GaitState[]) {
+				if (visited.has(nextState)) continue;
+
+				const transition = transitionGraph[currentState][nextState];
+				if (!transition || transition.length === 0) continue;
+
+				// Build path by combining current path + this transition
+				const newPath = [...currentPath];
+				
+				// Add transition animations, but skip intermediate loops
+				for (let i = 0; i < transition.length; i++) {
+					const anim = transition[i];
+					// Skip intermediate loop animations (not the final target)
+					if (nextState !== to && i === transition.length - 1 && anim === nextState) {
+						continue; // Skip intermediate loop
+					}
+					newPath.push(anim);
+				}
+
+				// Found target state!
+				if (nextState === to) {
+					console.log(`BFS path ${from}→${to}:`, newPath);
+					return newPath;
+				}
+
+				// Add to queue for further exploration
+				visited.add(nextState);
+				queue.push({ state: nextState, path: newPath });
+			}
+		}
+
+		// No path found - fallback
+		console.warn(`No transition path found from ${from} to ${to}`);
+		return [];
+	}
 
 	let canvas: HTMLCanvasElement;
 	let scene: THREE.Scene;
@@ -178,14 +220,12 @@
 	let selectedAnimation = '';
 	let isPlaying = false;
 
-	// Transition state
+	// New simplified state management
+	let animationQueue: string[] = [];
+	let currentAnimIndex = 0;
+	let pendingTargetGait: GaitState | null = null;
+	let currentGaitState: GaitState = 'stand';
 	let isTransitioning = false;
-
-	// Sequence state
-	let currentSequence: string[] | null = null;
-	let sequenceIndex = 0;
-	let sequenceQueue: string[][] = [];
-	let pendingTransitions: string[] = [];
 	let waitForCycleEnd = false;
 
 	// Model scale control
@@ -387,25 +427,35 @@
 		selectedAnimation = animationName;
 	}
 
-	function playSequence(sequenceId: string) {
-		const sequence = animationSequences[sequenceId];
-		if (!sequence || sequence.length === 0) return;
-
-		currentSequence = sequence;
-		sequenceIndex = 0;
-		isTransitioning = true;
-
-		// Play the first animation in the sequence (transition, no loop)
-		playAnimation(sequence[0], false, 0.3);
-	}
-
+	// New queue-based animation system
 	function playNextInQueue() {
-		if (sequenceQueue.length > 0) {
-			currentSequence = sequenceQueue.shift()!;
-			sequenceIndex = 0;
-			isTransitioning = true;
-			playAnimation(currentSequence[0], false, 0.3);
+		// Check if queue is complete
+		if (currentAnimIndex >= animationQueue.length) {
+			// Transition complete - cleanup and check for pending
+			isTransitioning = false;
+			currentAnimIndex = 0;
+			animationQueue = [];
+			
+			// Update current gait state
+			currentGaitState = getCurrentGait();
+			
+			// Process pending transition if any
+			if (pendingTargetGait) {
+				const nextTarget = pendingTargetGait;
+				pendingTargetGait = null;
+				waitForCycleEnd = false;
+				startTransitionToGait(nextTarget);
+			}
+			return;
 		}
+
+		// Play next animation in queue
+		const animName = animationQueue[currentAnimIndex];
+		const isLastInQueue = currentAnimIndex === animationQueue.length - 1;
+		
+		// Last animation should loop, others should not
+		playAnimation(animName, isLastInQueue, 0.3);
+		currentAnimIndex++;
 	}
 
 	function stopAnimation() {
@@ -420,25 +470,23 @@
 		return clip ? clip.duration : 1.0;
 	}
 
-	function getCurrentGait(): string {
+	function getCurrentGait(): GaitState {
 		if (selectedAnimation.includes('gallop')) return 'gallop';
 		if (selectedAnimation.includes('trot')) return 'trot';
 		if (selectedAnimation.includes('walk')) return 'walk';
 		if (selectedAnimation.includes('sit')) return 'sit';
 		if (selectedAnimation.includes('reach')) return 'reach';
 		if (selectedAnimation.includes('stand')) return 'stand';
-		return 'stand'; // default
+		return currentGaitState; // fallback to tracked state
 	}
 
-	function playTransitionTo(targetGait: string) {
+	function playTransitionTo(targetGait: GaitState) {
 		const currentGait = getCurrentGait();
-		if (currentGait === targetGait) return; // already in target gait
+		if (currentGait === targetGait && !isTransitioning) return; // already in target gait
 
 		if (isTransitioning) {
 			// Queue the transition request
-			if (!pendingTransitions.includes(targetGait)) {
-				pendingTransitions.push(targetGait);
-			}
+			pendingTargetGait = targetGait;
 			return;
 		}
 
@@ -446,34 +494,34 @@
 		const currentClip = animations.find((clip) => clip.name === selectedAnimation);
 		if (currentClip && currentAction && currentAction.loop === THREE.LoopRepeat) {
 			// Currently in a looping animation, wait for cycle end
-			if (!pendingTransitions.includes(targetGait)) {
-				pendingTransitions.push(targetGait);
-			}
+			pendingTargetGait = targetGait;
 			waitForCycleEnd = true;
 			return;
 		}
 
 		// Start transition immediately
-		startTransition(targetGait);
+		startTransitionToGait(targetGait);
 		waitForCycleEnd = false; // Reset flag
 	}
 
-	function startTransition(targetGait: string) {
+	function startTransitionToGait(targetGait: GaitState) {
 		const currentGait = getCurrentGait();
-		const pathKey = `${currentGait}-${targetGait}`;
-		const path = transitionPaths[pathKey];
-		if (!path || path.length === 0) {
-			console.log(`No transition path defined for ${pathKey}`);
+		const transitionPath = findTransitionPath(currentGait, targetGait);
+		
+		if (transitionPath.length === 0) {
+			console.warn(`No transition path found from ${currentGait} to ${targetGait}`);
 			return;
 		}
 
-		// Queue all sequences in the path
-		sequenceQueue = path.map((seqId) => animationSequences[seqId]).filter((seq) => seq);
-
-		if (sequenceQueue.length > 0) {
-			playNextInQueue();
-		}
+		// Set up animation queue
+		animationQueue = transitionPath;
+		currentAnimIndex = 0;
+		isTransitioning = true;
+		
+		// Start playing the queue
+		playNextInQueue();
 	}
+
 
 	function updateModelScale() {
 		if (model) {
@@ -500,45 +548,27 @@
 			mixer.update(CONFIG.animation.deltaTime);
 
 			// Check for cycle end to trigger queued transitions
-			if (waitForCycleEnd && currentAction && selectedAnimation) {
+			if (waitForCycleEnd && currentAction && selectedAnimation && pendingTargetGait) {
 				const currentClip = animations.find((clip) => clip.name === selectedAnimation);
 				if (currentClip && currentAction.loop === THREE.LoopRepeat) {
 					const cycleProgress = currentAction.time % currentClip.duration;
 					const timeToEnd = currentClip.duration - cycleProgress;
 
 					// Trigger transition when close to end of cycle (within crossfade duration)
-					if (timeToEnd <= 0.3 && pendingTransitions.length > 0) {
-						const nextTarget = pendingTransitions.shift()!;
+					if (timeToEnd <= 0.3) {
+						const nextTarget = pendingTargetGait;
+						pendingTargetGait = null;
 						waitForCycleEnd = false;
-						startTransition(nextTarget);
+						startTransitionToGait(nextTarget);
 					}
 				}
 			}
 
-			// Check for sequence transitions
-			if (isTransitioning && currentAction && selectedAnimation && currentSequence) {
+			// Check for animation queue transitions
+			if (isTransitioning && currentAction && selectedAnimation) {
 				const currentClip = animations.find((clip) => clip.name === selectedAnimation);
 				if (currentClip && currentAction.time >= currentClip.duration - 0.05) {
-					if (sequenceIndex < currentSequence.length - 1) {
-						sequenceIndex++;
-						const nextAnim = currentSequence[sequenceIndex];
-						const isLast = sequenceIndex === currentSequence.length - 1;
-						playAnimation(nextAnim, isLast, 0.3); // Last animation in sequence loops
-					} else {
-						// Sequence completed
-						currentSequence = null;
-						sequenceIndex = 0;
-						isTransitioning = false;
-
-						// Check if there are more sequences in queue
-						if (sequenceQueue.length > 0) {
-							playNextInQueue();
-						} else if (pendingTransitions.length > 0) {
-							// Process next pending transition
-							const nextTarget = pendingTransitions.shift()!;
-							startTransition(nextTarget);
-						}
-					}
+					playNextInQueue(); // Simple - handles everything
 				}
 			}
 		}
