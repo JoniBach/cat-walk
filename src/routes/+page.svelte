@@ -96,6 +96,7 @@
 		stand_to_trot: ['stand_to_trot', 'trot'],
 		stand_to_walk: ['stand_to_walk', 'walk'],
 		stand_to_gallop_direct: ['stand_to_trot', 'trot_to_gallop', 'gallop'],
+		stand_to_sit: ['stand_to_sit', 'sit'],
 		trot: ['trot'],
 		trot_to_stand: ['trot_to_stand', 'stand'],
 		trot_to_walk: ['trot_to_walk', 'walk'],
@@ -108,6 +109,18 @@
 		walk_to_stand: ['walk_to_stand', 'stand'],
 		walk_to_trot: ['walk_to_trot', 'trot'],
 		walk_to_gallop_direct: ['walk_to_trot', 'trot_to_gallop', 'gallop'],
+		sit: ['sit'],
+		sit_to_stand: ['sit_to_stand', 'stand'],
+		sit_to_walk_direct: ['sit_to_stand', 'stand_to_walk', 'walk'],
+		sit_to_trot_direct: ['sit_to_stand', 'stand_to_trot', 'trot'],
+		sit_to_gallop_direct: ['sit_to_stand', 'stand_to_gallop_direct'],
+		sit_to_reach: ['sit_to_reach', 'reach'],
+		reach: ['reach'],
+		reach_to_sit: ['reach_to_sit', 'sit'],
+		reach_to_stand_direct: ['reach_to_sit', 'sit_to_stand', 'stand'],
+		reach_to_walk_direct: ['reach_to_sit', 'sit_to_walk_direct'],
+		reach_to_trot_direct: ['reach_to_sit', 'sit_to_trot_direct'],
+		reach_to_gallop_direct: ['reach_to_sit', 'sit_to_gallop_direct'],
 	};
 
 	// Transition paths for smart chaining between states
@@ -116,18 +129,38 @@
 		'stand-trot': ['stand_to_trot'],
 		'stand-walk': ['stand_to_walk'],
 		'stand-gallop': ['stand_to_gallop_direct'],
+		'stand-sit': ['stand_to_sit'],
+		'stand-reach': ['stand_to_sit', 'sit_to_reach'],
 		'trot-trot': ['trot'],
 		'trot-stand': ['trot_to_stand'],
 		'trot-walk': ['trot_to_walk'],
 		'trot-gallop': ['trot_to_gallop'],
+		'trot-sit': ['trot_to_stand', 'stand_to_sit'],
+		'trot-reach': ['trot_to_stand', 'stand_to_sit', 'sit_to_reach'],
 		'gallop-gallop': ['gallop'],
 		'gallop-stand': ['gallop_to_stand_direct'],
 		'gallop-walk': ['gallop_to_walk_direct'],
 		'gallop-trot': ['gallop_to_trot'],
+		'gallop-sit': ['gallop_to_stand_direct', 'stand_to_sit'],
+		'gallop-reach': ['gallop_to_stand_direct', 'stand_to_sit', 'sit_to_reach'],
 		'walk-walk': ['walk'],
 		'walk-stand': ['walk_to_stand'],
 		'walk-trot': ['walk_to_trot'],
 		'walk-gallop': ['walk_to_gallop_direct'],
+		'walk-sit': ['walk_to_stand', 'stand_to_sit'],
+		'walk-reach': ['walk_to_stand', 'stand_to_sit', 'sit_to_reach'],
+		'sit-sit': ['sit'],
+		'sit-stand': ['sit_to_stand'],
+		'sit-walk': ['sit_to_walk_direct'],
+		'sit-trot': ['sit_to_trot_direct'],
+		'sit-gallop': ['sit_to_gallop_direct'],
+		'sit-reach': ['sit_to_reach'],
+		'reach-reach': ['reach'],
+		'reach-stand': ['reach_to_stand_direct'],
+		'reach-walk': ['reach_to_walk_direct'],
+		'reach-trot': ['reach_to_trot_direct'],
+		'reach-gallop': ['reach_to_gallop_direct'],
+		'reach-sit': ['reach_to_sit'],
 	};
 
 	let canvas: HTMLCanvasElement;
@@ -391,6 +424,8 @@
 		if (selectedAnimation.includes('gallop')) return 'gallop';
 		if (selectedAnimation.includes('trot')) return 'trot';
 		if (selectedAnimation.includes('walk')) return 'walk';
+		if (selectedAnimation.includes('sit')) return 'sit';
+		if (selectedAnimation.includes('reach')) return 'reach';
 		if (selectedAnimation.includes('stand')) return 'stand';
 		return 'stand'; // default
 	}
@@ -521,12 +556,15 @@
 
 	<div class="controls">
 		<div class="button-group">
+			<button on:click={() => playTransitionTo('sit')} class="gait-btn"> Sit </button>
+			<button on:click={() => playTransitionTo('reach')} class="gait-btn"> Reach </button>
+
 			<button on:click={() => playTransitionTo('stand')} class="gait-btn"> Stand </button>
 			<button on:click={() => playTransitionTo('walk')} class="gait-btn"> Walk </button>
 			<button on:click={() => playTransitionTo('trot')} class="gait-btn"> Trot </button>
 			<button on:click={() => playTransitionTo('gallop')} class="gait-btn"> Gallop </button>
 		</div>
-		<h1 class="controls-title">GLTF Cat Viewer</h1>
+		<h1 class="controls-title">Cat Walkies</h1>
 	</div>
 </div>
 
