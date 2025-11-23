@@ -23,7 +23,7 @@
 		// Renderer settings
 		renderer: {
 			antialias: true,
-			shadowMapType: THREE.PCFSoftShadowMap
+			shadowMapType: THREE.VSMShadowMap // Variance Shadow Mapping for ultra soft shadows
 		},
 
 		// Lighting settings
@@ -36,7 +36,18 @@
 				color: 0xffffff,
 				intensity: 0.8,
 				position: { x: 10, y: 10, z: 5 },
-				shadowMapSize: 2048
+				shadowMapSize: 4096, // Good balance for VSM
+				shadowRadius: 10, // Much higher radius for very soft shadows
+				shadowBias: 0, // VSM doesn't need bias
+				shadowBlurSamples: 0, // VSM handles blur internally
+				shadowCamera: {
+					near: 0.1,
+					far: 100,
+					left: -25,
+					right: 25,
+					top: 25,
+					bottom: -25
+				}
 			}
 		},
 
@@ -48,17 +59,23 @@
 
 		// Model settings
 		model: {
-			scale: 2.0 // Default scale multiplier
+			scale: 7 // Default scale multiplier
 		},
 
 		// Controls settings
 		controls: {
 			enableDamping: true,
+			enableZoom: true,
+			enableRotate: true,
+			enablePan: false,
 			dampingFactor: 0.05,
-			screenSpacePanning: false,
 			minDistance: 2,
 			maxDistance: 10,
-			maxPolarAngle: Math.PI / 2
+			minPolarAngle: 0,
+			maxPolarAngle: Math.PI / 2,
+			minAzimuthAngle: -Infinity,
+			maxAzimuthAngle: Infinity,
+			screenSpacePanning: false
 		},
 
 		// Animation settings
@@ -88,13 +105,33 @@
 	let selectedAnimation = '';
 	let isPlaying = false;
 
+	// Walking state
+	let isWalking = false;
+
+	// Transition state
+	let isTransitioning = false;
+	let pendingTransition: string | null = null;
+
+	// Walk stop transition state
+	let shouldStopWalking = false;
+
 	// Model scale control
 	let modelScale = CONFIG.model.scale;
+
+	function handleKeyDown(event: KeyboardEvent) {
+		if (event.code === 'Space' || event.code === 'Enter') {
+			event.preventDefault(); // Prevent default behavior (page scroll for space, form submit for enter)
+			toggleWalk();
+		}
+	}
 
 	onMount(() => {
 		initThreeJS();
 		loadGLTF();
 		animate();
+
+		// Add keyboard event listeners
+		window.addEventListener('keydown', handleKeyDown);
 
 		return () => {
 			if (controls) {
@@ -103,6 +140,8 @@
 			if (renderer) {
 				renderer.dispose();
 			}
+			// Remove keyboard event listeners
+			window.removeEventListener('keydown', handleKeyDown);
 		};
 	});
 
@@ -151,26 +190,61 @@
 			CONFIG.lighting.directional.position.z
 		);
 		directionalLight.castShadow = true;
+
+		// Configure shadow properties for VSM ultra soft shadows
 		directionalLight.shadow.mapSize.width = CONFIG.lighting.directional.shadowMapSize;
 		directionalLight.shadow.mapSize.height = CONFIG.lighting.directional.shadowMapSize;
+		directionalLight.shadow.radius = CONFIG.lighting.directional.shadowRadius;
+
+		// VSM doesn't use bias, blurSamples, or normalBias
+		// These settings are handled internally by VSM
+
+		// Configure shadow camera for better coverage and softness
+		directionalLight.shadow.camera.near = CONFIG.lighting.directional.shadowCamera.near;
+		directionalLight.shadow.camera.far = CONFIG.lighting.directional.shadowCamera.far;
+		directionalLight.shadow.camera.left = CONFIG.lighting.directional.shadowCamera.left;
+		directionalLight.shadow.camera.right = CONFIG.lighting.directional.shadowCamera.right;
+		directionalLight.shadow.camera.top = CONFIG.lighting.directional.shadowCamera.top;
+		directionalLight.shadow.camera.bottom = CONFIG.lighting.directional.shadowCamera.bottom;
+
+		directionalLight.shadow.camera.updateProjectionMatrix();
+		renderer.shadowMap.needsUpdate = true; // Force shadow map regeneration
+
+		// Debug logging for shadow settings
+		console.log('Shadow settings applied:', {
+			type: renderer.shadowMap.type === THREE.VSMShadowMap ? 'VSM' : 'PCF',
+			mapSize: directionalLight.shadow.mapSize,
+			radius: directionalLight.shadow.radius
+		});
+
 		scene.add(directionalLight);
 
 		// Ground
 		const groundGeometry = new THREE.PlaneGeometry(CONFIG.ground.size, CONFIG.ground.size);
-		const groundMaterial = new THREE.MeshLambertMaterial({ color: CONFIG.ground.color });
+		const groundMaterial = new THREE.MeshLambertMaterial({
+			color: CONFIG.ground.color,
+			transparent: false // Ensure no transparency interferes with shadows
+		});
 		const ground = new THREE.Mesh(groundGeometry, groundMaterial);
 		ground.rotation.x = -Math.PI / 2;
 		ground.receiveShadow = true;
+		ground.name = 'ground'; // For debugging
 		scene.add(ground);
 
 		// Mouse controls
 		controls = new OrbitControls(camera, renderer.domElement);
 		controls.enableDamping = CONFIG.controls.enableDamping;
+		controls.enableZoom = CONFIG.controls.enableZoom;
+		controls.enableRotate = CONFIG.controls.enableRotate;
+		controls.enablePan = CONFIG.controls.enablePan;
 		controls.dampingFactor = CONFIG.controls.dampingFactor;
-		controls.screenSpacePanning = CONFIG.controls.screenSpacePanning;
 		controls.minDistance = CONFIG.controls.minDistance;
 		controls.maxDistance = CONFIG.controls.maxDistance;
+		controls.minPolarAngle = CONFIG.controls.minPolarAngle;
 		controls.maxPolarAngle = CONFIG.controls.maxPolarAngle;
+		controls.minAzimuthAngle = CONFIG.controls.minAzimuthAngle;
+		controls.maxAzimuthAngle = CONFIG.controls.maxAzimuthAngle;
+		controls.screenSpacePanning = CONFIG.controls.screenSpacePanning;
 
 		// Handle window resize
 		window.addEventListener('resize', onWindowResize);
@@ -202,10 +276,8 @@
 					animationNames = animations.map((clip) => clip.name);
 					console.log('Available animations:', animationNames);
 
-					// Set default animation
-					if (animationNames.length > 0) {
-						selectedAnimation = animationNames[0];
-					}
+					// Set default animation to stand
+					playAnimation('stand', true, 0); // No crossfade for initial animation
 				}
 			},
 			(progress) => {
@@ -217,22 +289,41 @@
 		);
 	}
 
-	function playAnimation(animationName: string) {
+	function playAnimation(
+		animationName: string,
+		loop: boolean = true,
+		crossfadeDuration: number = 0.3
+	) {
 		if (!mixer || !animations) return;
 
-		// Stop current animation
-		if (currentAction) {
-			currentAction.stop();
+		// Find the new animation
+		const clip = animations.find((clip) => clip.name === animationName);
+		if (!clip) return;
+
+		// Create the new action
+		const newAction = mixer.clipAction(clip);
+		newAction.loop = loop ? THREE.LoopRepeat : THREE.LoopOnce;
+		newAction.clampWhenFinished = !loop;
+
+		// Handle crossfading for smooth transitions
+		if (currentAction && crossfadeDuration > 0) {
+			// Crossfade from current to new animation
+			newAction.reset();
+			newAction.play();
+			newAction.crossFadeFrom(currentAction, crossfadeDuration, false);
+		} else {
+			// Stop current animation if no crossfade
+			if (currentAction) {
+				currentAction.stop();
+			}
+			newAction.reset();
+			newAction.play();
 		}
 
-		// Find and play new animation
-		const clip = animations.find((clip) => clip.name === animationName);
-		if (clip) {
-			currentAction = mixer.clipAction(clip);
-			currentAction.reset();
-			currentAction.play();
-			isPlaying = true;
-		}
+		// Update current action reference
+		currentAction = newAction;
+		isPlaying = true;
+		selectedAnimation = animationName;
 	}
 
 	function stopAnimation() {
@@ -242,15 +333,37 @@
 		}
 	}
 
-	function updateModelScale() {
-		if (model) {
-			model.scale.setScalar(modelScale);
+	function toggleWalk() {
+		const wasWalking = isWalking;
+		isWalking = !isWalking;
+
+		if (isWalking) {
+			// Start walking: stand-to-walk → walk (seamless with crossfade)
+			playAnimation('stand-to-walk', false, 0.3); // Longer crossfade for smoother transition
+			isTransitioning = true;
+			pendingTransition = 'walk';
+		} else {
+			// Stop walking: set flag to transition at end of current walk cycle
+			if (wasWalking && selectedAnimation === 'walk') {
+				// Currently in walk loop, wait for cycle to finish
+				shouldStopWalking = true;
+			} else {
+				// Not in walk loop, directly transition
+				playAnimation('Walk to stand', false, 0.3); // Longer crossfade for smoother transition
+				isTransitioning = true;
+				pendingTransition = 'stand';
+			}
 		}
 	}
 
-	function onAnimationChange() {
-		if (selectedAnimation) {
-			playAnimation(selectedAnimation);
+	function getAnimationDuration(animationName: string): number {
+		const clip = animations.find((clip) => clip.name === animationName);
+		return clip ? clip.duration : 1.0;
+	}
+
+	function updateModelScale() {
+		if (model) {
+			model.scale.setScalar(modelScale);
 		}
 	}
 
@@ -271,6 +384,40 @@
 		// Update animation mixer
 		if (mixer) {
 			mixer.update(CONFIG.animation.deltaTime);
+
+			// Check for walk cycle end to stop walking
+			if (shouldStopWalking && selectedAnimation === 'walk' && currentAction) {
+				const walkClip = animations.find((clip) => clip.name === 'walk');
+				if (walkClip) {
+					const cycleProgress = currentAction.time % walkClip.duration;
+					const timeToEnd = walkClip.duration - cycleProgress;
+
+					// Trigger transition when very close to end of cycle (within 0.1 seconds)
+					if (timeToEnd <= 0.1) {
+						playAnimation('Walk to stand', false, 0.4); // Even longer crossfade for walk-to-stand
+						isTransitioning = true;
+						pendingTransition = 'stand';
+						shouldStopWalking = false;
+					}
+				}
+			}
+
+			// Check for seamless transitions
+			if (isTransitioning && currentAction && selectedAnimation) {
+				const currentClip = animations.find((clip) => clip.name === selectedAnimation);
+				if (currentClip && currentAction.time >= currentClip.duration - 0.05) {
+					// Near end of animation
+					if (pendingTransition) {
+						if (pendingTransition === 'walk') {
+							playAnimation('walk', true, 0.3); // Crossfade to walk loop
+						} else if (pendingTransition === 'stand') {
+							playAnimation('stand', true, 0.3); // Crossfade to stand loop
+						}
+						isTransitioning = false;
+						pendingTransition = null;
+					}
+				}
+			}
 		}
 
 		renderer.render(scene, camera);
@@ -285,52 +432,11 @@
 	<canvas bind:this={canvas}></canvas>
 
 	<div class="controls">
-		<h2>Model Controls</h2>
-
-		<div class="control-group">
-			<label for="scale-slider">Model Scale: {modelScale.toFixed(2)}</label>
-			<input
-				type="range"
-				id="scale-slider"
-				min="0.1"
-				max="3.0"
-				step="0.1"
-				bind:value={modelScale}
-				on:input={updateModelScale}
-			/>
-		</div>
-
-		<h2>Animation Controls</h2>
-
-		<div class="control-group">
-			<label for="animation-select">Select Animation:</label>
-			<select
-				id="animation-select"
-				bind:value={selectedAnimation}
-				on:change={onAnimationChange}
-				disabled={animationNames.length === 0}
-			>
-				{#each animationNames as animationName}
-					<option value={animationName}>{animationName}</option>
-				{/each}
-			</select>
-		</div>
-
-		<div class="control-group">
-			<button on:click={onAnimationChange} disabled={!selectedAnimation} class="play-btn">
-				Play Animation
-			</button>
-
-			<button on:click={stopAnimation} disabled={!isPlaying} class="stop-btn">
-				Stop Animation
-			</button>
-		</div>
-
-		<div class="info">
-			<p>Status: {isPlaying ? 'Playing' : 'Stopped'}</p>
-			<p>Current: {selectedAnimation || 'None'}</p>
-			<p>Available: {animationNames.length} animations</p>
-		</div>
+		<h1>Cat Walk</h1>
+		<button on:click={toggleWalk} class="walk-btn">
+			{isWalking ? 'Stop Walking' : 'Start Walking'}
+		</button>
+		<p class="keyboard-hint">Press <kbd>Space</kbd> or <kbd>Enter</kbd></p>
 	</div>
 </div>
 
@@ -351,95 +457,109 @@
 	.controls {
 		position: absolute;
 		top: 20px;
-		right: 20px;
+		left: 20px;
 		background: rgba(0, 0, 0, 0.8);
 		color: white;
-		padding: 20px;
+		padding: 12px;
 		border-radius: 8px;
-		min-width: 250px;
+		min-width: 180px;
 		font-family: Arial, sans-serif;
+		backdrop-filter: blur(10px);
 	}
 
-	.controls h2 {
-		margin: 0 0 15px 0;
+	.controls h1 {
+		margin: 0 0 10px 0;
 		font-size: 18px;
+		color: #fff;
+		text-align: center;
+	}
+
+	.walk-btn {
+		width: 100%;
+		padding: 8px 16px;
+		background: #2196f3;
+		color: white;
+		border: none;
+		border-radius: 6px;
+		cursor: pointer;
+		font-size: 14px;
+		font-weight: bold;
+		transition: all 0.2s ease;
+	}
+
+	.walk-btn:hover {
+		background: #1976d2;
+		transform: translateY(-1px);
+	}
+
+	.walk-btn:active {
+		transform: translateY(0);
+	}
+
+	.keyboard-hint {
+		margin: 8px 0 0 0;
+		font-size: 10px;
+		color: #ccc;
+		text-align: center;
+		opacity: 0.8;
+	}
+
+	.keyboard-hint kbd {
+		background: rgba(255, 255, 255, 0.1);
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		border-radius: 3px;
+		padding: 1px 3px;
+		font-size: 9px;
+		font-family: monospace;
 		color: #fff;
 	}
 
-	.control-group {
-		margin-bottom: 15px;
+	/* Mobile responsiveness */
+	@media (max-width: 768px) {
+		.controls {
+			top: 10px;
+			left: 10px;
+			right: 10px;
+			min-width: auto;
+			padding: 10px;
+			border-radius: 6px;
+		}
+
+		.controls h1 {
+			font-size: 16px;
+			margin-bottom: 8px;
+		}
+
+		.walk-btn {
+			padding: 10px 12px;
+			font-size: 14px;
+		}
+
+		.keyboard-hint {
+			font-size: 9px;
+			margin-top: 6px;
+		}
 	}
 
-	.control-group label {
-		display: block;
-		margin-bottom: 5px;
-		font-size: 14px;
-		color: #ccc;
-	}
+	@media (max-width: 480px) {
+		.controls {
+			padding: 8px;
+		}
 
-	select {
-		width: 100%;
-		padding: 8px;
-		border: 1px solid #555;
-		border-radius: 4px;
-		background: #333;
-		color: white;
-		font-size: 14px;
-	}
+		.controls h1 {
+			font-size: 14px;
+			margin-bottom: 6px;
+		}
 
-	select:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-	}
+		.walk-btn {
+			padding: 12px 10px;
+			font-size: 13px;
+		}
 
-	input[type='range'] {
-		width: 100%;
-		margin-top: 5px;
-	}
-
-	button {
-		padding: 10px 15px;
-		margin-right: 10px;
-		border: none;
-		border-radius: 4px;
-		cursor: pointer;
-		font-size: 14px;
-		transition: background-color 0.2s;
-	}
-
-	.play-btn {
-		background: #4caf50;
-		color: white;
-	}
-
-	.play-btn:hover:not(:disabled) {
-		background: #45a049;
-	}
-
-	.stop-btn {
-		background: #f44336;
-		color: white;
-	}
-
-	.stop-btn:hover:not(:disabled) {
-		background: #da190b;
-	}
-
-	button:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-	}
-
-	.info {
-		margin-top: 15px;
-		padding-top: 15px;
-		border-top: 1px solid #555;
-	}
-
-	.info p {
-		margin: 5px 0;
-		font-size: 12px;
-		color: #ccc;
+		.keyboard-hint {
+			font-size: 8px;
+			margin-top: 4px;
+		}
 	}
 
 	:global(body) {
