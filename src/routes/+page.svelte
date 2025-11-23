@@ -575,7 +575,7 @@
 </script>
 
 <svelte:head>
-	<title>GLTF Cat Viewer</title>
+	<title>Cat Walkies - in Three.js by JoniBach</title>
 </svelte:head>
 
 <div class="viewer-container">
@@ -591,7 +591,9 @@
 			<button on:click={() => playTransitionTo('trot')} class="gait-btn"> Trot </button>
 			<button on:click={() => playTransitionTo('gallop')} class="gait-btn"> Gallop </button>
 		</div>
-		<h1 class="controls-title">Cat Walkies</h1>
+		<h1 class="controls-title">
+			Cat Walkies by <a target="_blank" class="link" href="https://github.com/JoniBach">JoniBach</a>
+		</h1>
 	</div>
 </div>
 
@@ -601,6 +603,10 @@
 		width: 100vw;
 		height: 100vh;
 		overflow: hidden;
+	}
+
+	.link {
+		color: rgb(101, 186, 225);
 	}
 
 	canvas {
