@@ -95,12 +95,19 @@
 		stand: ['stand'],
 		stand_to_trot: ['stand_to_trot', 'trot'],
 		stand_to_walk: ['stand_to_walk', 'walk'],
+		stand_to_gallop_full: ['stand_to_trot', 'trot', 'trot_to_gallop', 'gallop'],
 		trot: ['trot'],
 		trot_to_stand: ['trot_to_stand', 'stand'],
 		trot_to_walk: ['trot_to_walk', 'walk'],
+		trot_to_gallop: ['trot_to_gallop', 'gallop'],
+		gallop: ['gallop'],
+		gallop_to_stand_full: ['gallop_to_trot', 'trot', 'trot_to_stand', 'stand'],
+		gallop_to_walk_full: ['gallop_to_trot', 'trot', 'trot_to_walk', 'walk'],
+		gallop_to_trot: ['gallop_to_trot', 'trot'],
 		walk: ['walk'],
 		walk_to_stand: ['walk_to_stand', 'stand'],
-		walk_to_trot: ['walk_to_trot', 'trot']
+		walk_to_trot: ['walk_to_trot', 'trot'],
+		walk_to_gallop_full: ['walk_to_trot', 'trot', 'trot_to_gallop', 'gallop'],
 	};
 
 	// Transition paths for smart chaining between states
@@ -108,12 +115,19 @@
 		'stand-stand': ['stand'],
 		'stand-trot': ['stand_to_trot'],
 		'stand-walk': ['stand_to_walk'],
+		'stand-gallop': ['stand_to_gallop_full'],
 		'trot-trot': ['trot'],
 		'trot-stand': ['trot_to_stand'],
 		'trot-walk': ['trot_to_walk'],
+		'trot-gallop': ['trot_to_gallop'],
+		'gallop-gallop': ['gallop'],
+		'gallop-stand': ['gallop_to_stand_full'],
+		'gallop-walk': ['gallop_to_walk_full'],
+		'gallop-trot': ['gallop_to_trot'],
 		'walk-walk': ['walk'],
 		'walk-stand': ['walk_to_stand'],
-		'walk-trot': ['walk_to_trot']
+		'walk-trot': ['walk_to_trot'],
+		'walk-gallop': ['walk_to_gallop_full'],
 	};
 
 	let canvas: HTMLCanvasElement;
@@ -374,6 +388,7 @@
 	}
 
 	function getCurrentGait(): string {
+		if (selectedAnimation.includes('gallop')) return 'gallop';
 		if (selectedAnimation.includes('trot')) return 'trot';
 		if (selectedAnimation.includes('walk')) return 'walk';
 		if (selectedAnimation.includes('stand')) return 'stand';
@@ -509,6 +524,7 @@
 			<button on:click={() => playTransitionTo('stand')} class="gait-btn"> Stand </button>
 			<button on:click={() => playTransitionTo('walk')} class="gait-btn"> Walk </button>
 			<button on:click={() => playTransitionTo('trot')} class="gait-btn"> Trot </button>
+			<button on:click={() => playTransitionTo('gallop')} class="gait-btn"> Gallop </button>
 		</div>
 		<h1 class="controls-title">GLTF Cat Viewer</h1>
 	</div>
