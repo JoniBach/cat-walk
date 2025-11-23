@@ -81,7 +81,12 @@
 		// Animation settings
 		animation: {
 			fps: 60,
-			deltaTime: 0.016 // 1/60
+			deltaTime: 0.01 // 1/60
+		},
+
+		// Menu/UI settings
+		menu: {
+			position: 'top' as 'top' | 'bottom' // Can be 'top' or 'bottom'
 		},
 
 		// File paths
@@ -581,7 +586,11 @@
 <div class="viewer-container">
 	<canvas bind:this={canvas}></canvas>
 
-	<div class="controls">
+	<div
+		class="controls"
+		class:menu-top={CONFIG.menu.position === 'top'}
+		class:menu-bottom={CONFIG.menu.position === 'bottom'}
+	>
 		<div class="button-group">
 			<button on:click={() => playTransitionTo('sit')} class="gait-btn"> Sit </button>
 			<button on:click={() => playTransitionTo('reach')} class="gait-btn"> Reach </button>
@@ -636,6 +645,17 @@
 		box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
 	}
 
+	/* Menu position overrides */
+	.menu-top {
+		top: 10px;
+		bottom: auto;
+	}
+
+	.menu-bottom {
+		bottom: 10px;
+		top: auto;
+	}
+
 	.button-group {
 		display: flex;
 		gap: 8px;
@@ -667,41 +687,6 @@
 
 	.gait-btn:active {
 		transform: translateY(0);
-	}
-
-	/* Mobile-specific improvements */
-	@media (max-width: 768px) {
-		.controls {
-			bottom: max(20px, env(safe-area-inset-bottom, 20px) + 10px);
-			left: max(10px, env(safe-area-inset-left, 10px));
-			right: max(10px, env(safe-area-inset-right, 10px));
-			padding: 16px;
-			padding-bottom: max(16px, env(safe-area-inset-bottom, 16px) + 6px);
-			background: rgba(0, 0, 0, 0.95);
-			backdrop-filter: blur(20px);
-			-webkit-backdrop-filter: blur(20px);
-			z-index: 10000;
-			box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-		}
-
-		.button-group {
-			gap: 12px;
-			margin-bottom: 8px;
-		}
-
-		.gait-btn {
-			padding: 10px 12px;
-			font-size: 12px;
-			min-width: 60px;
-			border: 1px solid rgba(255, 255, 255, 0.2);
-		}
-
-		.controls-title {
-			font-size: 12px;
-			margin: 4px 0 0 0;
-			text-align: center;
-			width: 100%;
-		}
 	}
 
 	:global(body) {
