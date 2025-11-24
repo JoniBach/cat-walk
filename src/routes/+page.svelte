@@ -80,8 +80,10 @@
 
 		// Animation settings
 		animation: {
-			fps: 60,
-			deltaTime: 0.01 // 1/60
+			// Note: deltaTime is now calculated dynamically using THREE.Clock
+			// instead of a fixed value to ensure consistent speed across all devices
+			// Speed multiplier to match original animation timing (0.01 was ~100 FPS equivalent)
+			speedMultiplier: 1.5 // Adjust this to fine-tune animation speed
 		},
 
 		// Menu/UI settings
@@ -223,6 +225,10 @@
 	let selectedAnimation = '';
 	let isPlaying = false;
 
+	// Frame timing for consistent animation speed
+	let lastFrameTime = 0;
+	let clock: THREE.Clock;
+
 	// New simplified state management
 	let animationQueue: string[] = [];
 	let currentAnimIndex = 0;
@@ -235,6 +241,9 @@
 	let modelScale = CONFIG.model.scale;
 
 	onMount(() => {
+		// Initialize Three.js clock for frame-independent timing
+		clock = new THREE.Clock();
+		
 		initThreeJS();
 		loadGLTF();
 		animate();
@@ -245,6 +254,9 @@
 			}
 			if (renderer) {
 				renderer.dispose();
+			}
+			if (clock) {
+				clock.stop();
 			}
 		};
 	});
@@ -540,14 +552,20 @@
 	function animate() {
 		requestAnimationFrame(animate);
 
+		// Calculate actual elapsed time since last frame (frame-rate independent)
+		const delta = clock.getDelta();
+		
+		// Apply speed multiplier to match original animation timing expectations
+		const adjustedDelta = delta * CONFIG.animation.speedMultiplier;
+
 		// Update controls
 		if (controls) {
 			controls.update();
 		}
 
-		// Update animation mixer
+		// Update animation mixer with adjusted delta time
 		if (mixer) {
-			mixer.update(CONFIG.animation.deltaTime);
+			mixer.update(adjustedDelta); // Use speed-adjusted delta for consistent animation timing
 
 			// Check for cycle end to trigger queued transitions
 			if (waitForCycleEnd && currentAction && selectedAnimation && pendingTargetGait) {
