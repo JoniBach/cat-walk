@@ -91,7 +91,7 @@
 
 		// File paths
 		paths: {
-			gltfModel: '/gltf/lowpoly cat 5.glb'
+			gltfModel: '/gltf/lowpoly cat 5.1.glb'
 		}
 	} as const;
 
@@ -379,6 +379,9 @@
 					// Extract animation names
 					animationNames = animations.map((clip) => clip.name);
 					console.log('Available animations:', animationNames);
+
+					// Log available gait actions
+					console.log('Available gait actions:', ['sit', 'reach', 'stand', 'walk', 'trot', 'gallop']);
 
 					// Set default animation to stand
 					playAnimation('stand', true, 0); // No crossfade for initial animation
